@@ -1,0 +1,68 @@
+有時候我們遇到一些組合資料，真的在普通的情況下都沒辦法達到你想要的效果，特殊的SQL語法可以幫你解決難題，先前是你是你要知道你想要的答案才能運用，以上是我自導自編，針對菜鳥入門程式設計師需要學習心態與哪些基礎技巧。
+不過像這種特殊的SQL應用，最好是不要太常用，或者你能保證業主他不會更換資料庫系統，非必要可以尋求其他方法解決，雖然他們都有各自資料庫系統的處理方法。
+這次的方法只試用ORACLE很多國外的網頁都有寫別種的方法，可以參考!!
+
+SYS_CONNECT_BY_PATH 合併多行字串
+舉例我有一個ID是35號，他有3組金額
+
+ID    money
+35      100
+35      200
+35      300
+有一天業主跟你說，我要SQL產出報表，樣子要像
+
+ID        money
+35        100,200,300
+
+
+如果只看過基本SQL你應該會很傻眼，怎麼把money的資料都併在一起，因為35的地方可以用group by就可以解決，但是money沒辦法!!
+
+首先我們先把資料做排順序加上數字NO1
+```
+SELECT id , money,
+ROW_NUMBER() OVER(PARTITION BY id ORDER BY money) AS NO1
+FROM my_table
+ORDER BY id;
+```
+
+在來利用NO1的資料創造出LEVEL順序
+
+SELECT id, money, NO1, level
+FROM
+(SELECT id, money,
+ROW_NUMBER() OVER(PARTITION BY id ORDER BY money) AS NO1
+FROM my_table
+ORDER BY id ) NO2
+START WITH NO2.NO1 = 1
+CONNECT BY id = PRIOR id
+AND NO1 - 1 = PRIOR NO1
+
+
+我們的答案是不是已經出現在最後一排了呢
+
+SELECT NO2.id, NO2.money, SYS_CONNECT_BY_PATH(NO2.money, ',') AS money_list
+FROM (SELECT id, money,
+ROW_NUMBER() OVER(PARTITION BY id ORDER BY money) AS NO1
+FROM my_table
+ORDER BY id ) NO2
+START WITH NO2.NO1 = 1
+CONNECT BY NO2.id = PRIOR NO2.id
+AND NO2.NO1 - 1 = PRIOR NO2.NO1
+
+
+接下來取出最大值跟group byn篩選出我們想要的，各位只要取最後這塊並且修改欄位名稱就可以直接使用了。
+
+SELECT NO2.id,  SUBSTR(MAX(SYS_CONNECT_BY_PATH(NO2.money,',')),2) AS money_list
+FROM
+(SELECT id, money,
+ROW_NUMBER() OVER(PARTITION BY id ORDER BY money) AS NO1
+FROM my_table
+ORDER BY id ) NO2
+START WITH NO2.NO1 = 1
+CONNECT BY NO2.id = PRIOR NO2.id
+AND NO2.NO1 - 1 = PRIOR NO2.NO1
+GROUP BY NO2.id
+order by NO2.id
+
+
+原理的來源我也不懂，畢竟我們只要會用就好，還有知道想要的效果，除非你真的要鑽研資料庫管理師之類的，因為會用到的機率還不高，但是你想用的時候就跟保命符一樣，老闆說這是很冷門的東西最好不要用，因為時間有限阿只能想辦法交差弄出來。
